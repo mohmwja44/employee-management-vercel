@@ -18,6 +18,64 @@ if (dbUrl && dbUrl.includes('tidbcloud.com')) {
 const connection = await mysql.createConnection(dbUrl);
 export const db = drizzle(connection, { schema, mode: "default" });
 
+// Function to initialize tables if they don't exist
+async function initTables() {
+  console.log("Checking and initializing database tables...");
+  try {
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS employees (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ibsId VARCHAR(50) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        isAdmin INT NOT NULL DEFAULT 0,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS shifts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employeeId INT NOT NULL,
+        saturday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        sunday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        monday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        tuesday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        wednesday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        thursday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        friday VARCHAR(50) NOT NULL DEFAULT 'OFF',
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS systemSettings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        \`key\` VARCHAR(255) NOT NULL UNIQUE,
+        value VARCHAR(255) NOT NULL,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        openId VARCHAR(255) NOT NULL UNIQUE,
+        name VARCHAR(255),
+        email VARCHAR(255),
+        loginMethod VARCHAR(50),
+        role VARCHAR(20) NOT NULL DEFAULT 'user',
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        lastSignedIn TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`
+    ];
+
+    for (const sql of tables) {
+      await connection.execute(sql);
+    }
+    console.log("Database tables checked/created successfully.");
+  } catch (error) {
+    console.error("Error initializing tables:", error);
+    // Don't throw, just log. The app might still work if tables already exist.
+  }
+}
+
+// Run initialization
+await initTables();
+
 export async function getDb() {
   return db;
 }
