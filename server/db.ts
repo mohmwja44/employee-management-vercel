@@ -1,80 +1,80 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 import * as schema from "../drizzle/schema";
-import { users, employees, shifts, systemSettings, shiftArchives } from "../drizzle/schema";
+import { users, employees, shifts, systemSettings } from "../drizzle/schema";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 
-// Database connection
-let dbUrl = ENV.databaseUrl || "";
-
-// Add SSL parameters for TiDB Cloud
-if (dbUrl && dbUrl.includes('tidbcloud.com')) {
-  const separator = dbUrl.includes('?') ? '&' : '?';
-  dbUrl = dbUrl + separator + 'ssl={"rejectUnauthorized":false}';
+if (!ENV.databaseUrl) {
+  throw new Error("DATABASE_URL is required");
 }
 
-const connection = await mysql.createConnection(dbUrl);
-export const db = drizzle(connection, { schema, mode: "default" });
+const sql_client = neon(ENV.databaseUrl);
+export const db = drizzle(sql_client, { schema });
 
 // Function to initialize tables if they don't exist
 async function initTables() {
-  console.log("Checking and initializing database tables...");
+  console.log("Checking and initializing database tables (PostgreSQL)...");
   try {
-    const tables = [
-      `CREATE TABLE IF NOT EXISTS employees (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        ibsId VARCHAR(50) NOT NULL UNIQUE,
-        name VARCHAR(255) NOT NULL,
-        isAdmin INT NOT NULL DEFAULT 0,
-        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )`,
-      `CREATE TABLE IF NOT EXISTS shifts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        employeeId INT NOT NULL,
-        saturday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        sunday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        monday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        tuesday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        wednesday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        thursday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        friday VARCHAR(50) NOT NULL DEFAULT 'OFF',
-        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )`,
-      `CREATE TABLE IF NOT EXISTS systemSettings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        \`key\` VARCHAR(255) NOT NULL UNIQUE,
-        value VARCHAR(255) NOT NULL,
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )`,
-      `CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        openId VARCHAR(255) NOT NULL UNIQUE,
+    await sql_client`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        "openId" VARCHAR(255) NOT NULL UNIQUE,
         name VARCHAR(255),
         email VARCHAR(255),
-        loginMethod VARCHAR(50),
-        role VARCHAR(20) NOT NULL DEFAULT 'user',
-        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        lastSignedIn TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`
-    ];
+        "loginMethod" VARCHAR(50),
+        role VARCHAR(20) DEFAULT 'user' NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        "lastSignedIn" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `;
+    
+    await sql_client`
+      CREATE TABLE IF NOT EXISTS employees (
+        id SERIAL PRIMARY KEY,
+        "ibsId" VARCHAR(50) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        "isAdmin" INTEGER DEFAULT 0 NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `;
 
-    for (const sql of tables) {
-      await connection.execute(sql);
-    }
+    await sql_client`
+      CREATE TABLE IF NOT EXISTS shifts (
+        id SERIAL PRIMARY KEY,
+        "employeeId" INTEGER NOT NULL,
+        saturday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        sunday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        monday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        tuesday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        wednesday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        thursday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        friday VARCHAR(50) DEFAULT 'OFF' NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `;
+
+    await sql_client`
+      CREATE TABLE IF NOT EXISTS "systemSettings" (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(255) NOT NULL UNIQUE,
+        value VARCHAR(255) NOT NULL,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `;
+
     console.log("Database tables checked/created successfully.");
   } catch (error) {
     console.error("Error initializing tables:", error);
-    // Don't throw, just log. The app might still work if tables already exist.
   }
 }
 
 // Run initialization
-await initTables();
+initTables().catch(console.error);
 
 export async function getDb() {
   return db;
@@ -94,7 +94,8 @@ export async function upsertUser(user: any) {
       role: role,
       lastSignedIn: new Date(),
     })
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: users.openId,
       set: {
         name: user.name,
         email: user.email,
@@ -157,18 +158,9 @@ export async function createOrUpdateEmployee(ibsId: string, name: string) {
   } catch (error) {
     console.error("Database error in createOrUpdateEmployee:", error);
     if (error instanceof TRPCError) throw error;
-    
-    // Handle table missing error
-    if (error.code === 'ER_NO_SUCH_TABLE') {
-      throw new TRPCError({ 
-        code: "INTERNAL_SERVER_ERROR", 
-        message: "Database tables are missing. Please run the setup script or check your TiDB permissions." 
-      });
-    }
-    
     throw new TRPCError({ 
       code: "INTERNAL_SERVER_ERROR", 
-      message: "Database connection failed. Please check your DATABASE_URL and TiDB status." 
+      message: "Database connection failed. Please check your Neon DATABASE_URL." 
     });
   }
 }
@@ -181,11 +173,9 @@ export async function addEmployee(ibsId: string, name: string) {
     ibsId,
     name,
     isAdmin: 0,
-  });
+  }).returning();
   
-  // Get the last inserted ID from the result
-  const insertedId = (result as any)[0]?.insertId || (result as any).insertId;
-  return await getEmployeeById(insertedId);
+  return result[0];
 }
 
 export async function deleteEmployee(id: number) {
@@ -254,76 +244,17 @@ export async function resetAllShifts() {
   return { success: true };
 }
 
-// Archive functions
-export async function archiveWeeklyShifts(weekStartDate: Date, adminId: string) {
-  const existingArchive = await db.select()
-    .from(shiftArchives)
-    .where(eq(shiftArchives.weekStartDate, weekStartDate))
-    .limit(1);
-    
-  if (existingArchive.length > 0) {
-    throw new TRPCError({ code: "CONFLICT", message: "This week is already archived." });
-  }
-  
-  const currentShifts = await getAllShifts();
-  if (currentShifts.length === 0) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "No shifts to archive." });
-  }
-  
-  const archivesToInsert = currentShifts.map(shift => ({
-    employeeId: shift.employeeId,
-    weekStartDate: weekStartDate,
-    saturday: shift.saturday,
-    sunday: shift.sunday,
-    monday: shift.monday,
-    tuesday: shift.tuesday,
-    wednesday: shift.wednesday,
-    thursday: shift.thursday,
-    friday: shift.friday,
-    archivedBy: adminId,
-  }));
-  
-  await db.insert(shiftArchives).values(archivesToInsert);
-  return { success: true, count: archivesToInsert.length };
-}
-
-export async function getArchivedShiftsByWeek(weekStartDate: Date) {
-  return await db.select().from(shiftArchives).where(eq(shiftArchives.weekStartDate, weekStartDate));
-}
-
-export async function getArchivedShiftsByMonth(year: number, month: number) {
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0);
-  
-  return await db.select()
-    .from(shiftArchives)
-    .where(and(
-      gte(shiftArchives.weekStartDate, startDate),
-      lte(shiftArchives.weekStartDate, endDate)
-    ));
-}
-
-export async function getAllArchivedShifts() {
-  return await db.select().from(shiftArchives);
-}
-
-export async function getArchivedShiftsWithEmployeeInfo() {
-  const archives = await db.select().from(shiftArchives);
-  const allEmployees = await getAllEmployees();
-  
-  return archives.map(archive => ({
-    ...archive,
-    employee: allEmployees.find(e => e.id === archive.employeeId)
-  }));
-}
-
 // System settings
 export async function isShiftsOpen() {
-  const result = await db.select()
-    .from(systemSettings)
-    .where(eq(systemSettings.key, "shifts_open"))
-    .limit(1);
-  return result[0]?.value === "true";
+  try {
+    const result = await db.select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, "shifts_open"))
+      .limit(1);
+    return result[0]?.value === "true";
+  } catch (e) {
+    return true; // Default to true if table doesn't exist yet
+  }
 }
 
 export async function toggleShiftsOpen(isOpen: boolean) {
@@ -332,7 +263,8 @@ export async function toggleShiftsOpen(isOpen: boolean) {
       key: "shifts_open",
       value: isOpen ? "true" : "false",
     })
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: systemSettings.key,
       set: {
         value: isOpen ? "true" : "false",
         updatedAt: new Date(),
