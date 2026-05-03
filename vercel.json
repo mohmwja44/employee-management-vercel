@@ -1,32 +1,24 @@
 {
   "version": 2,
+  "framework": "vite",
   "builds": [
     {
       "src": "server/_core/index.ts",
       "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "server/_core/index.ts"
+      "source": "/api/trpc/:path*",
+      "destination": "/api/trpc"
     },
     {
-      "src": "/(.*)",
-      "dest": "/$1",
-      "continue": true
+      "source": "/api/:path*",
+      "destination": "/server/_core/index.ts"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
