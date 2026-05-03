@@ -69,19 +69,50 @@ export async function getAllEmployees() {
 }
 
 export async function createOrUpdateEmployee(ibsId: string, name: string) {
-  const existing = await getEmployeeByIbsId(ibsId);
-  if (!existing) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
-  }
-  if (existing.name.toLowerCase() !== name.toLowerCase()) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Employee details do not match" });
-  }
-  
-  await db.update(employees)
-    .set({ updatedAt: new Date() })
-    .where(eq(employees.ibsId, ibsId));
+  try {
+    const existing = await getEmployeeByIbsId(ibsId);
     
-  return existing;
+    // Auto-create admin if it's the special IBS ID 000000
+    if (!existing && ibsId === "000000") {
+      console.log("Bootstrap: Creating default admin Mohamed Hany");
+      await db.insert(employees).values({
+        ibsId: "000000",
+        name: "Mohamed Hany",
+        isAdmin: 1
+      });
+      return await getEmployeeByIbsId("000000");
+    }
+
+    if (!existing) {
+      throw new TRPCError({ code: "NOT_FOUND", message: `Employee with IBS ID ${ibsId} not found. Please contact admin.` });
+    }
+    
+    if (existing.name.toLowerCase() !== name.toLowerCase()) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Employee name does not match our records." });
+    }
+    
+    await db.update(employees)
+      .set({ updatedAt: new Date() })
+      .where(eq(employees.ibsId, ibsId));
+      
+    return existing;
+  } catch (error) {
+    console.error("Database error in createOrUpdateEmployee:", error);
+    if (error instanceof TRPCError) throw error;
+    
+    // Handle table missing error
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      throw new TRPCError({ 
+        code: "INTERNAL_SERVER_ERROR", 
+        message: "Database tables are missing. Please run the setup script or check your TiDB permissions." 
+      });
+    }
+    
+    throw new TRPCError({ 
+      code: "INTERNAL_SERVER_ERROR", 
+      message: "Database connection failed. Please check your DATABASE_URL and TiDB status." 
+    });
+  }
 }
 
 export async function addEmployee(ibsId: string, name: string) {
