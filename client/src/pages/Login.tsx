@@ -34,8 +34,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         name: name.trim(),
       });
       onLoginSuccess(employee);
-    } catch (err) {
-      setError("Login failed. Please try again.");
+    } catch (err: any) {
+      setError(err.message || "Login failed. Please try again.");
       console.error(err);
     } finally {
       setIsLoading(false);

@@ -9,11 +9,7 @@
   ],
   "rewrites": [
     {
-      "source": "/api/trpc/:path*",
-      "destination": "/api/trpc"
-    },
-    {
-      "source": "/api/:path*",
+      "source": "/api/(.*)",
       "destination": "/server/_core/index.ts"
     },
     {
