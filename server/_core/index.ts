@@ -27,6 +27,15 @@ app.use(
   })
 );
 
+// Fallback for tRPC in serverless
+app.use(
+  "/api",
+  createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  })
+);
+
 // development mode uses Vite, production mode uses static files
 if (process.env.NODE_ENV === "development") {
   setupVite(app, server).catch(console.error);
