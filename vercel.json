@@ -1,20 +1,9 @@
 {
   "version": 2,
-  "framework": "vite",
-  "builds": [
-    {
-      "src": "server/_core/index.ts",
-      "use": "@vercel/node"
-    }
-  ],
   "rewrites": [
     {
-      "source": "/api/trpc/:path*",
-      "destination": "/api/trpc"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/server/_core/index.ts"
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
     },
     {
       "source": "/(.*)",
