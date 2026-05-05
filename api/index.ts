@@ -33,6 +33,18 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Health check endpoint
+app.get("/api/health", async (req, res) => {
+  try {
+    const { db } = await import("../server/db");
+    const { sql } = await import("drizzle-orm");
+    await db.execute(sql`SELECT 1`);
+    res.json({ status: "ok", database: "connected" });
+  } catch (error: any) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
 // OAuth callback
 registerOAuthRoutes(app);
 

@@ -35,8 +35,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       });
       onLoginSuccess(employee);
     } catch (err: any) {
-      setError(err.message || "Login failed. Please try again.");
-      console.error(err);
+      console.error("Login error details:", err);
+      const msg = err.shape?.message || err.message || "Login failed. Please try again.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
