@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
-import * as schema from "../drizzle/schema";
-import { users, employees, shifts, systemSettings } from "../drizzle/schema";
+import * as schema from "../drizzle/schema.js";
+import { users, employees, shifts, systemSettings } from "../drizzle/schema.js";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 

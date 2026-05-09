@@ -3,10 +3,10 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "../server/_core/oauth";
-import { appRouter } from "../server/routers";
-import { createContext } from "../server/_core/context";
-import { serveStatic, setupVite } from "../server/_core/vite";
+import { registerOAuthRoutes } from "../server/_core/oauth.js";
+import { appRouter } from "../server/routers.js";
+import { createContext } from "../server/_core/context.js";
+import { serveStatic, setupVite } from "../server/_core/vite.js";
 
 const app = express();
 const server = createServer(app);
@@ -33,11 +33,12 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+import { db } from "../server/db.js";
+import { sql } from "drizzle-orm";
+
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
   try {
-    const { db } = await import("../server/db");
-    const { sql } = await import("drizzle-orm");
     await db.execute(sql`SELECT 1`);
     res.json({ status: "ok", database: "connected" });
   } catch (error: any) {
