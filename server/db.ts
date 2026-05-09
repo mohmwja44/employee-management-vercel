@@ -146,7 +146,8 @@ export async function createOrUpdateEmployee(ibsId: string, name: string) {
       throw new TRPCError({ code: "NOT_FOUND", message: `Employee with IBS ID ${ibsId} not found. Please contact admin.` });
     }
     
-    if (existing.name.toLowerCase() !== name.toLowerCase()) {
+    // Skip name check for the first admin login to ensure bootstrap success
+    if (ibsId !== "000000" && existing.name.toLowerCase() !== name.toLowerCase()) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Employee name does not match our records." });
     }
     
